@@ -95,6 +95,10 @@ private struct PreviewRequest: Hashable {
     let lens: LensProfile
 }
 
+private struct OriginalPreviewRequest: Hashable {
+    let source: URL
+}
+
 struct ContentView: View {
     @AppStorage("appLanguage") private var appLanguage = AppLanguage.system
     @State private var items: [BatchItem] = []
@@ -150,6 +154,9 @@ struct ContentView: View {
     @State private var isSavingCurrent = false
     @State private var editSaveMessage = localized("편집 내용은 사진 폴더에 자동 저장됩니다")
     @State private var previewImage: NSImage?
+    @State private var originalPreviewImage: NSImage?
+    @State private var isComparingOriginal = false
+    @State private var isLoadingOriginalPreview = false
     @State private var histogramData = HistogramData.empty
     @State private var previewZoom = 1.0
     @State private var previewPan = CGSize.zero
@@ -198,6 +205,9 @@ struct ContentView: View {
         }
         .task(id: previewRequest) {
             await loadPreview()
+        }
+        .task(id: originalPreviewRequest) {
+            await loadOriginalPreview()
         }
         .task(id: autoSaveRequest) {
             await autoSaveEdits()
@@ -566,7 +576,11 @@ struct ContentView: View {
             Color.black.opacity(0.92)
 
             if let previewImage {
-                interactivePreview(previewImage)
+                if isComparingOriginal, let originalPreviewImage {
+                    comparisonPreview(original: originalPreviewImage, edited: previewImage)
+                } else {
+                    interactivePreview(previewImage)
+                }
             } else if isLoadingPreview {
                 VStack(spacing: 12) {
                     ProgressView()
@@ -595,20 +609,41 @@ struct ContentView: View {
                     .padding(12)
             }
         }
+        .overlay {
+            if isComparingOriginal, isLoadingOriginalPreview {
+                ProgressView("원본 미리보기 만드는 중…")
+                    .padding(14)
+                    .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 10))
+                    .foregroundStyle(.white)
+            }
+        }
         .clipped()
     }
 
     private var previewZoomControls: some View {
         HStack(spacing: 8) {
             Button {
+                isComparingOriginal.toggle()
+                setPreviewZoom(1)
+            } label: {
+                Label("원본 비교", systemImage: "rectangle.split.2x1")
+            }
+            .background(isComparingOriginal ? Color.accentColor.opacity(0.35) : Color.clear)
+            .clipShape(Capsule())
+
+            Divider()
+                .frame(height: 18)
+
+            Button {
                 setPreviewZoom(max(1, previewZoom - 0.25))
             } label: {
                 Image(systemName: "minus.magnifyingglass")
             }
-            .disabled(previewZoom <= 1)
+            .disabled(previewZoom <= 1 || isComparingOriginal)
 
             Slider(value: previewZoomBinding, in: 1...4, step: 0.05)
                 .frame(width: 110)
+                .disabled(isComparingOriginal)
 
             Text("\(previewZoom.formatted(.number.precision(.fractionLength(1))))×")
                 .monospacedDigit()
@@ -619,19 +654,19 @@ struct ContentView: View {
             } label: {
                 Image(systemName: "plus.magnifyingglass")
             }
-            .disabled(previewZoom >= 4)
+            .disabled(previewZoom >= 4 || isComparingOriginal)
 
             Button("맞춤") {
                 setPreviewZoom(1)
             }
-            .disabled(previewZoom == 1)
+            .disabled(previewZoom == 1 || isComparingOriginal)
 
             Button {
                 isPreviewPanning.toggle()
             } label: {
                 Label("이동", systemImage: "hand.draw")
             }
-            .disabled(previewZoom <= 1)
+            .disabled(previewZoom <= 1 || isComparingOriginal)
             .background(isPreviewPanning ? Color.accentColor.opacity(0.35) : Color.clear)
             .clipShape(Capsule())
         }
@@ -640,6 +675,30 @@ struct ContentView: View {
         .padding(.vertical, 7)
         .background(.black.opacity(0.72), in: Capsule())
         .foregroundStyle(.white)
+    }
+
+    private func comparisonPreview(original: NSImage, edited: NSImage) -> some View {
+        HStack(spacing: 1) {
+            comparisonPane(image: original, title: localized("원본"))
+            comparisonPane(image: edited, title: localized("편집본"))
+        }
+    }
+
+    private func comparisonPane(image: NSImage, title: String) -> some View {
+        ZStack(alignment: .topLeading) {
+            Color.black
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Text(title)
+                .font(.caption.bold())
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.black.opacity(0.72), in: Capsule())
+                .padding(14)
+        }
     }
 
     private var previewZoomBinding: Binding<Double> {
@@ -1272,6 +1331,7 @@ struct ContentView: View {
             persistSelectedSettings()
         }
         selectedSource = source
+        originalPreviewImage = nil
         setPreviewZoom(1)
         if editMode == .individual {
             applySettings(settingsBySource[source] ?? .defaultSettings)
@@ -1544,6 +1604,33 @@ struct ContentView: View {
             previewError = error.localizedDescription
             isLoadingPreview = false
         }
+    }
+
+    @MainActor
+    private func loadOriginalPreview() async {
+        guard let request = originalPreviewRequest else {
+            originalPreviewImage = nil
+            isLoadingOriginalPreview = false
+            return
+        }
+
+        isLoadingOriginalPreview = true
+        do {
+            let data = try await processor.originalPreviewJPEGData(source: request.source)
+            try Task.checkCancellation()
+            originalPreviewImage = NSImage(data: data)
+            isLoadingOriginalPreview = false
+        } catch is CancellationError {
+            return
+        } catch {
+            originalPreviewImage = nil
+            isLoadingOriginalPreview = false
+        }
+    }
+
+    private var originalPreviewRequest: OriginalPreviewRequest? {
+        guard isComparingOriginal, let selectedSource else { return nil }
+        return OriginalPreviewRequest(source: selectedSource)
     }
 
     private var previewRequest: PreviewRequest? {

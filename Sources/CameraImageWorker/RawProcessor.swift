@@ -120,6 +120,27 @@ actor RawProcessor {
         return data
     }
 
+    func originalPreviewJPEGData(source: URL, maxDimension: CGFloat = 1_600) throws -> Data {
+        guard let image = sourceImage(source: source, settings: .defaultSettings) else {
+            throw RawProcessorError.unreadableImage(source)
+        }
+        let longestEdge = max(image.extent.width, image.extent.height)
+        let scale = min(1, maxDimension / longestEdge)
+        let preview = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+
+        guard let data = context.jpegRepresentation(
+            of: preview,
+            colorSpace: colorSpace,
+            options: [
+                kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.82
+            ]
+        ) else {
+            throw RawProcessorError.previewEncodingFailed(source)
+        }
+        return data
+    }
+
     static func outputURL(for source: URL, in destinationFolder: URL) -> URL {
         destinationFolder
             .appendingPathComponent(source.deletingPathExtension().lastPathComponent)

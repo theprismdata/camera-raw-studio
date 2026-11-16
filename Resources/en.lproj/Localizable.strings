@@ -4,6 +4,9 @@
 "시스템 설정" = "System Default";
 "고급 설정" = "Advanced";
 "원본" = "Original";
+"편집본" = "Edited";
+"원본 비교" = "Compare Original";
+"원본 미리보기 만드는 중…" = "Creating original preview…";
 "자유" = "Freeform";
 "자연스럽게" = "Natural";
 "선명한 여행" = "Vivid Travel";
