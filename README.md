@@ -2,6 +2,8 @@
 
 Sony ZV-E10의 ARW 사진을 로컬에서 JPEG로 일괄 현상하는 macOS 앱입니다. 원본 파일은 수정하지 않습니다.
 
+![Camera RAW Studio 앱 화면](docs/images/camera-raw-studio-overview.jpg)
+
 ## 현재 기능
 
 - Sony ARW/DNG/JPEG 파일 다중 선택
@@ -20,6 +22,7 @@ Sony ZV-E10의 ARW 사진을 로컬에서 JPEG로 일괄 현상하는 macOS 앱�
 - 사진 폴더별 편집 내용과 변환 대상 자동 저장 및 재실행 복원
 - 현재 사진을 원본과 분리된 `_edit.jpg` 파일로 안전하게 저장
 - 선택한 폴더에 JPEG 일괄 저장
+- 앱 안에서 시스템 설정·한국어·영어·일본어·중국어(간체)를 즉시 전환하고 선택 언어 유지
 
 ## 실행
 
