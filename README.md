@@ -35,4 +35,13 @@ chmod +x scripts/build-app.sh
 open "dist/Camera RAW Studio.app"
 ```
 
+응용 프로그램 폴더에 설치:
+
+```sh
+chmod +x scripts/install-app.sh
+./scripts/install-app.sh
+```
+
+설치 후 Launchpad, Spotlight 또는 Finder의 응용 프로그램에서 `Camera RAW Studio`를 실행할 수 있습니다.
+
 영상 자동 편집은 다음 단계에서 같은 앱의 별도 작업 화면으로 추가할 예정입니다.

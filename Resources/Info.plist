@@ -7,15 +7,17 @@
     <key>CFBundleExecutable</key>
     <string>CameraImageWorker</string>
     <key>CFBundleIdentifier</key>
-    <string>com.local.sonyrawstudio</string>
+    <string>com.theprismdata.camerarawstudio</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
     <string>Camera RAW Studio</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon.icns</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>0.0.1</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
