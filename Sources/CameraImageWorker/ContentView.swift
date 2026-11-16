@@ -1284,6 +1284,7 @@ struct ContentView: View {
                 }
                 processingCompletedCount += 1
             }
+            await refreshPhotoList()
             isProcessing = false
             processingTotalCount = 0
         }
@@ -1310,11 +1311,45 @@ struct ContentView: View {
                     settings: settings
                 )
                 editSaveMessage = localizedFormat("%@ 저장 완료", output.lastPathComponent)
+                await refreshPhotoList()
             } catch {
                 editSaveMessage = localizedFormat("현재 사진 저장 실패: %@", error.localizedDescription)
             }
             isSavingCurrent = false
         }
+    }
+
+    @MainActor
+    private func refreshPhotoList() async {
+        guard let inputFolder else { return }
+        let previousSelection = selectedSource
+        let previousExportSelection = selectedForExport
+        let previousStates = Dictionary(uniqueKeysWithValues: items.map { ($0.source, $0.state) })
+        isScanningFolder = true
+
+        do {
+            let discovered = try await Task.detached {
+                try PhotoDiscovery.files(in: inputFolder)
+            }.value
+            let refreshedSources = Set(discovered)
+            items = discovered.map { source in
+                BatchItem(
+                    id: source,
+                    source: source,
+                    state: previousStates[source] ?? .waiting
+                )
+            }
+            selectedForExport = previousExportSelection.intersection(refreshedSources)
+            if let previousSelection, refreshedSources.contains(previousSelection) {
+                selectedSource = previousSelection
+            } else {
+                selectedSource = items.first?.source
+            }
+            previewRevision += 1
+        } catch {
+            importError = error.localizedDescription
+        }
+        isScanningFolder = false
     }
 
     private func toggleExportSelection(_ source: URL) {
