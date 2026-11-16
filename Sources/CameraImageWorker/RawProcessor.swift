@@ -27,6 +27,7 @@ actor RawProcessor {
         .useSoftwareRenderer: false
     ])
     private let denoiser = RestormerDenoiser()
+    private let faceRestorer = FaceRestorer()
 
     func develop(source: URL, destinationFolder: URL, settings: DevelopSettings) throws -> URL {
         try writeDeveloped(
@@ -50,9 +51,19 @@ actor RawProcessor {
         settings: DevelopSettings
     ) throws -> URL {
         let image = try developedImage(source: source, settings: settings)
-        let enhanced = try denoiser.enhance(
+        let denoised = try denoiser.enhance(
             image,
             strength: settings.aiDenoiseStrength,
+            context: context
+        )
+        let stabilized = applyShakeCorrection(
+            to: denoised,
+            strength: settings.shakeCorrectionStrength
+        )
+        let enhanced = faceRestorer.restore(
+            stabilized,
+            strength: settings.faceRestorationStrength,
+            manualRegion: settings.faceRegion,
             context: context
         )
 
@@ -75,14 +86,24 @@ actor RawProcessor {
     }
 
     func previewJPEGData(source: URL, settings: DevelopSettings, maxDimension: CGFloat = 1_600) throws -> Data {
-        let image = try developedImage(source: source, settings: settings)
+        let image = try developedImage(source: source, settings: settings, applyingCrop: false)
         let longestEdge = max(image.extent.width, image.extent.height)
         let previewLimit = settings.aiDenoiseStrength == .off ? maxDimension : min(maxDimension, 640)
         let scale = min(1, previewLimit / longestEdge)
         let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-        let preview = try denoiser.enhance(
+        let denoised = try denoiser.enhance(
             scaled,
             strength: settings.aiDenoiseStrength,
+            context: context
+        )
+        let stabilized = applyShakeCorrection(
+            to: denoised,
+            strength: settings.shakeCorrectionStrength
+        )
+        let preview = faceRestorer.restore(
+            stabilized,
+            strength: settings.faceRestorationStrength,
+            manualRegion: settings.faceRegion,
             context: context
         )
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
@@ -124,14 +145,31 @@ actor RawProcessor {
         }
     }
 
-    private func developedImage(source: URL, settings: DevelopSettings) throws -> CIImage {
+    private func developedImage(
+        source: URL,
+        settings: DevelopSettings,
+        applyingCrop: Bool = true
+    ) throws -> CIImage {
         guard var image = sourceImage(source: source, settings: settings) else {
             throw RawProcessorError.unreadableImage(source)
         }
 
         image = applyLensCorrection(to: image, strength: settings.lens.distortionCorrection)
         image = applyStraightening(to: image, degrees: settings.rotationDegrees)
-        return applyTone(to: image, settings: settings)
+        image = applyPerspective(to: image, settings: settings)
+        if applyingCrop {
+            image = Self.applyCrop(
+                to: image,
+                aspect: settings.cropAspect,
+                customRatio: settings.cropCustomRatio,
+                zoom: settings.cropZoom,
+                offsetX: settings.cropOffsetX,
+                offsetY: settings.cropOffsetY
+            )
+        }
+        image = applyTone(to: image, settings: settings)
+        image = applyVignette(to: image, settings: settings)
+        return applyGrain(to: image, settings: settings)
     }
 
     private func sourceImage(source: URL, settings: DevelopSettings) -> CIImage? {
@@ -159,7 +197,49 @@ actor RawProcessor {
         controls.contrast = Float(settings.contrast)
         controls.saturation = Float(settings.saturation)
 
-        return controls.outputImage ?? image
+        let highlightShadow = CIFilter.highlightShadowAdjust()
+        highlightShadow.inputImage = controls.outputImage
+        highlightShadow.highlightAmount = Float(min(2, max(0, 1 + settings.highlights)))
+        highlightShadow.shadowAmount = Float(min(1, max(-1, settings.shadows)))
+
+        let curve = CIFilter.toneCurve()
+        curve.inputImage = highlightShadow.outputImage
+        curve.point0 = CGPoint(x: 0, y: min(0.18, max(0, settings.blacks * 0.15)))
+        curve.point1 = CGPoint(x: 0.25, y: min(0.45, max(0.05, 0.25 + settings.blacks * 0.12)))
+        curve.point2 = CGPoint(x: 0.5, y: 0.5)
+        curve.point3 = CGPoint(x: 0.75, y: min(0.95, max(0.55, 0.75 + settings.whites * 0.12)))
+        curve.point4 = CGPoint(x: 1, y: min(1, max(0.82, 1 + min(0, settings.whites) * 0.15)))
+
+        return curve.outputImage ?? highlightShadow.outputImage ?? controls.outputImage ?? image
+    }
+
+    private func applyShakeCorrection(
+        to image: CIImage,
+        strength: ShakeCorrectionStrength
+    ) -> CIImage {
+        guard strength != .off else { return image }
+
+        let parameters: (radius: Float, intensity: Float, sharpness: Float)
+        switch strength {
+        case .off:
+            return image
+        case .low:
+            parameters = (1.2, 0.35, 0.25)
+        case .medium:
+            parameters = (1.8, 0.55, 0.4)
+        case .high:
+            parameters = (2.4, 0.75, 0.55)
+        }
+
+        let unsharp = CIFilter.unsharpMask()
+        unsharp.inputImage = image
+        unsharp.radius = parameters.radius
+        unsharp.intensity = parameters.intensity
+
+        let sharpen = CIFilter.sharpenLuminance()
+        sharpen.inputImage = unsharp.outputImage
+        sharpen.sharpness = parameters.sharpness
+        return (sharpen.outputImage ?? unsharp.outputImage ?? image).cropped(to: image.extent)
     }
 
     private func applyLensCorrection(to image: CIImage, strength: Double) -> CIImage {
@@ -171,6 +251,70 @@ actor RawProcessor {
         filter.radius = Float(max(image.extent.width, image.extent.height) * 0.72)
         filter.scale = Float(-strength)
         return (filter.outputImage ?? image).cropped(to: image.extent)
+    }
+
+    private func applyPerspective(to image: CIImage, settings: DevelopSettings) -> CIImage {
+        let vertical = settings.perspectiveVertical
+        let horizontal = settings.perspectiveHorizontal
+        guard abs(vertical) > 0.001 || abs(horizontal) > 0.001 else { return image }
+
+        let extent = image.extent
+        let verticalInset = extent.width * CGFloat(vertical) * 0.18
+        let horizontalInset = extent.height * CGFloat(horizontal) * 0.18
+        let filter = CIFilter.perspectiveTransform()
+        filter.inputImage = image.clampedToExtent()
+        filter.topLeft = CGPoint(
+            x: extent.minX + verticalInset,
+            y: extent.maxY - horizontalInset
+        )
+        filter.topRight = CGPoint(
+            x: extent.maxX - verticalInset,
+            y: extent.maxY + horizontalInset
+        )
+        filter.bottomLeft = CGPoint(
+            x: extent.minX - verticalInset,
+            y: extent.minY + horizontalInset
+        )
+        filter.bottomRight = CGPoint(
+            x: extent.maxX + verticalInset,
+            y: extent.minY - horizontalInset
+        )
+        return (filter.outputImage ?? image).cropped(to: extent)
+    }
+
+    private func applyVignette(to image: CIImage, settings: DevelopSettings) -> CIImage {
+        guard abs(settings.vignetteAmount) > 0.001 else { return image }
+        let filter = CIFilter.vignette()
+        filter.inputImage = image
+        filter.intensity = Float(settings.vignetteAmount * 2)
+        let baseRadius = min(image.extent.width, image.extent.height)
+        filter.radius = Float(baseRadius * (0.18 + settings.vignetteMidpoint * 0.58 + settings.vignetteFeather * 0.18))
+        return (filter.outputImage ?? image).cropped(to: image.extent)
+    }
+
+    private func applyGrain(to image: CIImage, settings: DevelopSettings) -> CIImage {
+        guard settings.grainAmount > 0.001 else { return image }
+        guard let random = CIFilter.randomGenerator().outputImage else { return image }
+        let scale = CGFloat(max(0.35, settings.grainSize))
+        let noise = random.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+
+        let monochrome = CIFilter.colorControls()
+        monochrome.inputImage = noise
+        monochrome.saturation = 0
+        monochrome.contrast = Float(0.8 + settings.grainRoughness * 1.8)
+
+        let amount = Float(settings.grainAmount * 0.12)
+        let matrix = CIFilter.colorMatrix()
+        matrix.inputImage = monochrome.outputImage
+        matrix.rVector = CIVector(x: CGFloat(amount), y: 0, z: 0, w: 0)
+        matrix.gVector = CIVector(x: 0, y: CGFloat(amount), z: 0, w: 0)
+        matrix.bVector = CIVector(x: 0, y: 0, z: CGFloat(amount), w: 0)
+        matrix.biasVector = CIVector(x: -CGFloat(amount) / 2, y: -CGFloat(amount) / 2, z: -CGFloat(amount) / 2, w: 0)
+
+        let composite = CIFilter.additionCompositing()
+        composite.inputImage = matrix.outputImage?.cropped(to: image.extent)
+        composite.backgroundImage = image
+        return (composite.outputImage ?? image).cropped(to: image.extent)
     }
 
     private func applyStraightening(to image: CIImage, degrees: Double) -> CIImage {
@@ -196,5 +340,69 @@ actor RawProcessor {
         let horizontalCoverage = cosine + (height / width) * sine
         let verticalCoverage = cosine + (width / height) * sine
         return max(horizontalCoverage, verticalCoverage)
+    }
+
+    static func cropRect(
+        in extent: CGRect,
+        aspect: CropAspect,
+        customRatio: Double = 1,
+        zoom: Double,
+        offsetX: Double,
+        offsetY: Double
+    ) -> CGRect {
+        let sourceRatio = extent.width / extent.height
+        let targetRatio: CGFloat
+        switch aspect {
+        case .original:
+            targetRatio = sourceRatio
+        case .freeform:
+            targetRatio = CGFloat(max(0.05, customRatio))
+        default:
+            targetRatio = CGFloat(aspect.ratio ?? Double(sourceRatio))
+        }
+        var width = extent.width
+        var height = extent.height
+
+        if sourceRatio > targetRatio {
+            width = height * targetRatio
+        } else {
+            height = width / targetRatio
+        }
+
+        let safeZoom = CGFloat(min(10, max(1, zoom)))
+        width /= safeZoom
+        height /= safeZoom
+        let horizontalTravel = max(0, extent.width - width) / 2
+        let verticalTravel = max(0, extent.height - height) / 2
+        let centerX = extent.midX + horizontalTravel * CGFloat(min(1, max(-1, offsetX)))
+        let centerY = extent.midY - verticalTravel * CGFloat(min(1, max(-1, offsetY)))
+
+        return CGRect(
+            x: centerX - width / 2,
+            y: centerY - height / 2,
+            width: width,
+            height: height
+        ).integral
+    }
+
+    private static func applyCrop(
+        to image: CIImage,
+        aspect: CropAspect,
+        customRatio: Double,
+        zoom: Double,
+        offsetX: Double,
+        offsetY: Double
+    ) -> CIImage {
+        let rect = cropRect(
+            in: image.extent,
+            aspect: aspect,
+            customRatio: customRatio,
+            zoom: zoom,
+            offsetX: offsetX,
+            offsetY: offsetY
+        )
+        return image.cropped(to: rect).transformed(
+            by: CGAffineTransform(translationX: -rect.minX, y: -rect.minY)
+        )
     }
 }

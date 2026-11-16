@@ -84,6 +84,74 @@ func straighteningScaleCoversRotatedCorners() {
     #expect(rotated > 1)
 }
 
+@Test("크롭 비율과 위치를 이미지 범위 안에서 계산한다")
+func cropRectUsesAspectZoomAndPosition() {
+    let extent = CGRect(x: 0, y: 0, width: 6_000, height: 4_000)
+
+    let centered = RawProcessor.cropRect(
+        in: extent,
+        aspect: .square,
+        zoom: 1,
+        offsetX: 0,
+        offsetY: 0
+    )
+    let moved = RawProcessor.cropRect(
+        in: extent,
+        aspect: .square,
+        zoom: 2,
+        offsetX: 1,
+        offsetY: 1
+    )
+
+    #expect(centered.width == centered.height)
+    #expect(centered == CGRect(x: 1_000, y: 0, width: 4_000, height: 4_000))
+    #expect(moved.width == 2_000)
+    #expect(moved.maxX == extent.maxX)
+    #expect(moved.minY == extent.minY)
+}
+
+@Test("기존 편집 파일에는 기본 크롭 값이 적용된다")
+func oldSettingsDecodeWithDefaultCrop() throws {
+    let json = """
+    {
+      "exposure": 0,
+      "contrast": 1.05,
+      "saturation": 1,
+      "whiteBalanceTemperatureShift": 0,
+      "whiteBalanceTint": 0,
+      "aiDenoiseStrength": "off",
+      "rotationDegrees": 0,
+      "jpegQuality": 0.92,
+      "lens": {
+        "id": "sony-e-11-f1.8",
+        "name": "Sony E 11mm F1.8",
+        "focalLength": 11,
+        "aperture": 1.8,
+        "distortionCorrection": 0.1
+      }
+    }
+    """
+
+    let settings = try JSONDecoder().decode(DevelopSettings.self, from: Data(json.utf8))
+
+    #expect(settings.cropAspect == .original)
+    #expect(settings.cropCustomRatio == 1)
+    #expect(settings.cropZoom == 1)
+    #expect(settings.cropOffsetX == 0)
+    #expect(settings.cropOffsetY == 0)
+    #expect(settings.shakeCorrectionStrength == .off)
+    #expect(settings.faceRestorationStrength == .off)
+    #expect(settings.faceRegion == nil)
+    #expect(settings.highlights == 0)
+    #expect(settings.shadows == 0)
+    #expect(settings.whites == 0)
+    #expect(settings.blacks == 0)
+    #expect(settings.vignetteAmount == 0)
+    #expect(settings.grainAmount == 0)
+    #expect(settings.perspectiveVertical == 0)
+    #expect(settings.perspectiveHorizontal == 0)
+}
+
 @Test("편집 내용은 사진 폴더에서 다시 복원된다")
 func savedEditsRoundTripInPhotoFolder() throws {
     // Given
