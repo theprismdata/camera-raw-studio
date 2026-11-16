@@ -11,13 +11,13 @@ enum RestormerDenoiserError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .modelMissing:
-            "Restormer 로컬 AI 모델을 찾을 수 없습니다."
+            localized("Restormer 로컬 AI 모델을 찾을 수 없습니다.")
         case .imageRenderingFailed:
-            "AI 노이즈 제거용 이미지를 만들 수 없습니다."
+            localized("AI 노이즈 제거용 이미지를 만들 수 없습니다.")
         case .predictionOutputMissing:
-            "Restormer 모델의 출력 형식이 올바르지 않습니다."
+            localized("Restormer 모델의 출력 형식이 올바르지 않습니다.")
         case .imageCreationFailed:
-            "AI 노이즈 제거 결과 이미지를 만들 수 없습니다."
+            localized("AI 노이즈 제거 결과 이미지를 만들 수 없습니다.")
         }
     }
 }

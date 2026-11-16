@@ -11,9 +11,9 @@ private enum SettingsPanelMode: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .automatic:
-            "자동 설정(필터)"
+            localized("자동 설정(필터)")
         case .advanced:
-            "고급 설정"
+            localized("고급 설정")
         }
     }
 }
@@ -30,23 +30,23 @@ private enum AutomaticFilter: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .original: "원본"
-        case .natural: "자연스럽게"
-        case .vividTravel: "선명한 여행"
-        case .warmFilm: "따뜻한 필름"
-        case .night: "야간 개선"
-        case .portrait: "인물 보정"
+        case .original: localized("원본")
+        case .natural: localized("자연스럽게")
+        case .vividTravel: localized("선명한 여행")
+        case .warmFilm: localized("따뜻한 필름")
+        case .night: localized("야간 개선")
+        case .portrait: localized("인물 보정")
         }
     }
 
     var subtitle: String {
         switch self {
-        case .original: "효과를 초기화합니다"
-        case .natural: "밝기와 암부를 자연스럽게"
-        case .vividTravel: "색과 풍경을 또렷하게"
-        case .warmFilm: "따뜻한 색과 필름 입자"
-        case .night: "어두운 사진과 노이즈 개선"
-        case .portrait: "피부와 얼굴 디테일 보정"
+        case .original: localized("효과를 초기화합니다")
+        case .natural: localized("밝기와 암부를 자연스럽게")
+        case .vividTravel: localized("색과 풍경을 또렷하게")
+        case .warmFilm: localized("따뜻한 색과 필름 입자")
+        case .night: localized("어두운 사진과 노이즈 개선")
+        case .portrait: localized("피부와 얼굴 디테일 보정")
         }
     }
 
@@ -96,6 +96,7 @@ private struct PreviewRequest: Hashable {
 }
 
 struct ContentView: View {
+    @AppStorage("appLanguage") private var appLanguage = AppLanguage.system
     @State private var items: [BatchItem] = []
     @State private var selectedSource: URL?
     @State private var selectedForExport: Set<URL> = []
@@ -147,7 +148,7 @@ struct ContentView: View {
     @State private var processingCompletedCount = 0
     @State private var processingTotalCount = 0
     @State private var isSavingCurrent = false
-    @State private var editSaveMessage = "편집 내용은 사진 폴더에 자동 저장됩니다"
+    @State private var editSaveMessage = localized("편집 내용은 사진 폴더에 자동 저장됩니다")
     @State private var previewImage: NSImage?
     @State private var histogramData = HistogramData.empty
     @State private var previewZoom = 1.0
@@ -176,6 +177,7 @@ struct ContentView: View {
                 .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 370)
         } detail: {
             batchPanel
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .fileImporter(
             isPresented: $isImporting,
@@ -192,7 +194,7 @@ struct ContentView: View {
         .alert("폴더를 읽을 수 없습니다", isPresented: importErrorBinding) {
             Button("확인", role: .cancel) { importError = nil }
         } message: {
-            Text(importError ?? "알 수 없는 오류")
+            Text(importError ?? localized("알 수 없는 오류"))
         }
         .task(id: previewRequest) {
             await loadPreview()
@@ -204,7 +206,7 @@ struct ContentView: View {
             await loadSelectedMetadata()
         }
         .confirmationDialog(
-            editMode == .allFiles ? "모든 파일의 설정을 초기화할까요?" : "현재 사진의 설정을 초기화할까요?",
+            editMode == .allFiles ? localized("모든 파일의 설정을 초기화할까요?") : localized("현재 사진의 설정을 초기화할까요?"),
             isPresented: $isShowingResetConfirmation,
             titleVisibility: .visible
         ) {
@@ -213,10 +215,23 @@ struct ContentView: View {
         } message: {
             Text("원본 사진과 저장된 JPEG 파일은 변경되지 않습니다.")
         }
+        .environment(\.locale, appLanguage.locale)
+        .onChange(of: appLanguage) {
+            editSaveMessage = localized("편집 내용은 사진 폴더에 자동 저장됩니다")
+        }
     }
 
     private var settingsPanel: some View {
         Form {
+            Section("앱 언어") {
+                Picker("언어", selection: $appLanguage) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(language.title).tag(language)
+                    }
+                }
+                .pickerStyle(.menu)
+            }
+
             Section {
                 Picker("설정 화면", selection: $settingsPanelMode) {
                     ForEach(SettingsPanelMode.allCases) { mode in
@@ -327,7 +342,7 @@ struct ContentView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     HStack {
-                        Button(isSelectingFaceRegion ? "얼굴 영역 지정 중" : "얼굴 영역 지정") {
+                        Button(isSelectingFaceRegion ? localized("얼굴 영역 지정 중") : localized("얼굴 영역 지정")) {
                             isSelectingFaceRegion.toggle()
                             if isSelectingFaceRegion {
                                 isPreviewPanning = false
@@ -404,6 +419,7 @@ struct ContentView: View {
             }
         }
         .formStyle(.grouped)
+        .id(appLanguage)
     }
 
     private var automaticFilterSection: some View {
@@ -453,7 +469,7 @@ struct ContentView: View {
                 }
                 Button("저장 폴더 선택", action: chooseOutputFolder)
                     .disabled(inputFolder == nil || isProcessing)
-                Button(isSavingCurrent ? "저장 중…" : "현재 사진 저장", action: saveCurrentPhoto)
+                Button(isSavingCurrent ? localized("저장 중…") : localized("현재 사진 저장"), action: saveCurrentPhoto)
                     .disabled(selectedSource == nil || inputFolder == nil || isProcessing || isSavingCurrent)
                 if isSavingCurrent {
                     ProgressView()
@@ -480,12 +496,12 @@ struct ContentView: View {
                             total: Double(processingTotalCount)
                         )
                         .frame(width: 150)
-                        Text("처리 \(processingCompletedCount) / \(processingTotalCount)")
+                        Text(localizedFormat("처리 %d / %d", processingCompletedCount, processingTotalCount))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
-                Button("\(selectedForExport.count)개 JPEG 변환", action: processAll)
+                Button(localizedFormat("%d개 JPEG 변환", selectedForExport.count), action: processAll)
                     .buttonStyle(.borderedProminent)
                     .disabled(selectedForExport.isEmpty || outputFolder == nil || isProcessing)
             }
@@ -499,6 +515,7 @@ struct ContentView: View {
                     systemImage: "camera.aperture",
                     description: Text("Sony ARW 파일을 선택하면 원본을 보존한 채 JPEG로 변환합니다.")
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 HSplitView {
                     ScrollView {
@@ -530,14 +547,14 @@ struct ContentView: View {
             Divider()
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(outputFolder?.path(percentEncoded: false) ?? "저장 폴더를 선택하지 않았습니다")
+                    Text(outputFolder?.path(percentEncoded: false) ?? localized("저장 폴더를 선택하지 않았습니다"))
                         .lineLimit(1)
                     Text(editSaveMessage)
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 Spacer()
-                Text("선택 \(selectedForExport.count) / 전체 \(items.count)개")
+                Text(localizedFormat("선택 %d / 전체 %d개", selectedForExport.count, items.count))
                     .font(.caption)
             }
             .padding(10)
@@ -958,7 +975,7 @@ struct ContentView: View {
     private func slider(_ title: String, value: Binding<Double>, range: ClosedRange<Double>) -> some View {
         VStack(alignment: .leading) {
             HStack {
-                Text(title)
+                Text(localized(title))
                 Spacer()
                 Text(value.wrappedValue.formatted(.number.precision(.fractionLength(2))))
                     .monospacedDigit()
@@ -971,7 +988,7 @@ struct ContentView: View {
     private func signedSlider(_ title: String, value: Binding<Double>) -> some View {
         VStack(alignment: .leading) {
             HStack {
-                Text(title)
+                Text(localized(title))
                 Spacer()
                 Text(value.wrappedValue.formatted(.number.precision(.fractionLength(2)).sign(strategy: .always())))
                     .monospacedDigit()
@@ -1115,7 +1132,7 @@ struct ContentView: View {
                 selectedForExport = Set(items.map(\.source))
                 selectedSource = items.first?.source
                 applySettings(.defaultSettings)
-                editSaveMessage = "편집 내용은 사진 폴더에 자동 저장됩니다"
+                editSaveMessage = localized("편집 내용은 사진 폴더에 자동 저장됩니다")
                 return
             }
 
@@ -1134,7 +1151,7 @@ struct ContentView: View {
             case .individual:
                 applySettings(selectedSource.flatMap { settingsBySource[$0] } ?? .defaultSettings)
             }
-            editSaveMessage = "저장된 편집 내용을 복원했습니다"
+            editSaveMessage = localized("저장된 편집 내용을 복원했습니다")
         } catch {
             editMode = .allFiles
             globalSettings = .defaultSettings
@@ -1142,7 +1159,7 @@ struct ContentView: View {
             selectedForExport = Set(items.map(\.source))
             selectedSource = items.first?.source
             applySettings(.defaultSettings)
-            editSaveMessage = "저장된 편집 내용을 읽지 못했습니다"
+            editSaveMessage = localized("저장된 편집 내용을 읽지 못했습니다")
         }
     }
 
@@ -1156,9 +1173,9 @@ struct ContentView: View {
     private func chooseOutputFolder() {
         guard let inputFolder else { return }
         let panel = NSOpenPanel()
-        panel.title = "JPEG 저장 폴더 선택"
-        panel.message = "현재 사진 폴더 안에서 기존 폴더를 선택하거나 새로운 폴더를 만드세요."
-        panel.prompt = "선택"
+        panel.title = localized("JPEG 저장 폴더 선택")
+        panel.message = localized("현재 사진 폴더 안에서 기존 폴더를 선택하거나 새로운 폴더를 만드세요.")
+        panel.prompt = localized("선택")
         panel.directoryURL = inputFolder
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -1233,9 +1250,9 @@ struct ContentView: View {
                     destinationFolder: destinationFolder,
                     settings: settings
                 )
-                editSaveMessage = "\(output.lastPathComponent) 저장 완료"
+                editSaveMessage = localizedFormat("%@ 저장 완료", output.lastPathComponent)
             } catch {
-                editSaveMessage = "현재 사진 저장 실패: \(error.localizedDescription)"
+                editSaveMessage = localizedFormat("현재 사진 저장 실패: %@", error.localizedDescription)
             }
             isSavingCurrent = false
         }
@@ -1451,8 +1468,8 @@ struct ContentView: View {
             }
         }
         editSaveMessage = editMode == .allFiles
-            ? "모든 파일 설정을 초기화했습니다"
-            : "현재 사진 설정을 초기화했습니다"
+            ? localized("모든 파일 설정을 초기화했습니다")
+            : localized("현재 사진 설정을 초기화했습니다")
     }
 
     private var autoSaveRequest: AutoSaveRequest? {
@@ -1489,11 +1506,11 @@ struct ContentView: View {
             try await Task.detached {
                 try EditStore.save(request.document, in: request.folder)
             }.value
-            editSaveMessage = "편집 내용 자동 저장됨"
+            editSaveMessage = localized("편집 내용 자동 저장됨")
         } catch is CancellationError {
             return
         } catch {
-            editSaveMessage = "편집 내용 자동 저장 실패"
+            editSaveMessage = localized("편집 내용 자동 저장 실패")
         }
     }
 

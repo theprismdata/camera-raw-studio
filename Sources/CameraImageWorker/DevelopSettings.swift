@@ -9,9 +9,9 @@ enum EditApplicationMode: String, CaseIterable, Identifiable, Codable, Sendable 
     var title: String {
         switch self {
         case .allFiles:
-            "모든 파일 자동 설정"
+            localized("모든 파일 자동 설정")
         case .individual:
-            "개별 설정"
+            localized("개별 설정")
         }
     }
 }
@@ -27,13 +27,13 @@ enum AIDenoiseStrength: String, CaseIterable, Identifiable, Codable, Sendable {
     var title: String {
         switch self {
         case .off:
-            "사용 안 함"
+            localized("사용 안 함")
         case .low:
-            "약하게"
+            localized("약하게")
         case .medium:
-            "보통"
+            localized("보통")
         case .high:
-            "강하게"
+            localized("강하게")
         }
     }
 
@@ -62,13 +62,13 @@ enum ShakeCorrectionStrength: String, CaseIterable, Identifiable, Codable, Senda
     var title: String {
         switch self {
         case .off:
-            "사용 안 함"
+            localized("사용 안 함")
         case .low:
-            "약하게"
+            localized("약하게")
         case .medium:
-            "보통"
+            localized("보통")
         case .high:
-            "강하게"
+            localized("강하게")
         }
     }
 }
@@ -84,13 +84,13 @@ enum FaceRestorationStrength: String, CaseIterable, Identifiable, Codable, Senda
     var title: String {
         switch self {
         case .off:
-            "사용 안 함"
+            localized("사용 안 함")
         case .low:
-            "약하게"
+            localized("약하게")
         case .medium:
-            "보통"
+            localized("보통")
         case .high:
-            "강하게"
+            localized("강하게")
         }
     }
 }
@@ -115,9 +115,9 @@ enum CropAspect: String, CaseIterable, Identifiable, Codable, Sendable {
     var title: String {
         switch self {
         case .original:
-            "원본"
+            localized("원본")
         case .freeform:
-            "자유"
+            localized("자유")
         case .square:
             "1:1"
         case .fourByThree:

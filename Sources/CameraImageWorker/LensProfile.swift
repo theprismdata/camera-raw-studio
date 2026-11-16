@@ -36,7 +36,7 @@ struct LensProfile: Identifiable, Hashable, Codable, Sendable {
     static func custom(focalLength: Double, aperture: Double, correction: Double) -> LensProfile {
         LensProfile(
             id: "custom",
-            name: "사용자 렌즈 \(focalLength.formatted())mm F\(aperture.formatted())",
+            name: localizedFormat("사용자 렌즈 %@mm F%@", focalLength.formatted(), aperture.formatted()),
             focalLength: focalLength,
             aperture: aperture,
             distortionCorrection: correction

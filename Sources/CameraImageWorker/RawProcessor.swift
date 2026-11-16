@@ -12,11 +12,11 @@ enum RawProcessorError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unreadableImage(let url):
-            "이미지를 읽을 수 없습니다: \(url.lastPathComponent)"
+            localizedFormat("이미지를 읽을 수 없습니다: %@", url.lastPathComponent)
         case .jpegEncodingFailed(let url):
-            "JPEG 변환에 실패했습니다: \(url.lastPathComponent)"
+            localizedFormat("JPEG 변환에 실패했습니다: %@", url.lastPathComponent)
         case .previewEncodingFailed(let url):
-            "미리보기를 만들 수 없습니다: \(url.lastPathComponent)"
+            localizedFormat("미리보기를 만들 수 없습니다: %@", url.lastPathComponent)
         }
     }
 }

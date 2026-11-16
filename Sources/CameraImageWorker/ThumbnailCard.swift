@@ -60,12 +60,12 @@ struct ThumbnailCard: View {
             }
             .buttonStyle(.plain)
             .padding(10)
-            .accessibilityLabel(isIncluded ? "변환 대상에서 제외" : "변환 대상에 포함")
+            .accessibilityLabel(isIncluded ? localized("변환 대상에서 제외") : localized("변환 대상에 포함"))
         }
         .task(id: item.source) {
             await loadThumbnail()
         }
-        .accessibilityLabel("\(item.displayName) 미리보기")
+        .accessibilityLabel(localizedFormat("%@ 미리보기", item.displayName))
     }
 
     @ViewBuilder
